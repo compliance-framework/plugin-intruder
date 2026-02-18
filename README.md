@@ -13,7 +13,8 @@ You can find instructions on how to create a token [here](https://developers.int
 ```yaml
 plugins:
   intruder:
-    token: "gh-pat-abc123"
+    config:
+      token: "xxxxxxx-yyyyyyy-zzzzzz"
 ```
 
 ## Policies
