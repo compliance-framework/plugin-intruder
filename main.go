@@ -5,6 +5,7 @@ import (
 
 	"github.com/compliance-framework/agent/runner"
 	"github.com/compliance-framework/agent/runner/proto"
+	"github.com/compliance-framework/plugin-intruder/internal/intruder"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/hashicorp/go-hclog"
 	goplugin "github.com/hashicorp/go-plugin"
@@ -13,7 +14,8 @@ import (
 type IntruderPlugin struct {
 	logger hclog.Logger
 
-	config *PluginConfig
+	config         *PluginConfig
+	intruderClient *intruder.Client
 }
 
 type PluginConfig struct {
@@ -49,6 +51,13 @@ func (l *IntruderPlugin) Configure(req *proto.ConfigureRequest) (*proto.Configur
 }
 
 func (l *IntruderPlugin) Eval(req *proto.EvalRequest, apiHelper runner.ApiHelper) (*proto.EvalResponse, error) {
+	client, err := intruder.NewClient(l.logger, l.config.Token)
+	if err != nil {
+		l.logger.Error("Error creating Intruder client", "error", err)
+		return nil, err
+	}
+	l.intruderClient = client
+
 	return &proto.EvalResponse{
 		Status: proto.ExecutionStatus_SUCCESS,
 	}, nil

@@ -1,4 +1,4 @@
-module github.com/compliance-framework/plugin-github-repositories
+module github.com/compliance-framework/plugin-intruder
 
 go 1.26.0
 
