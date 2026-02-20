@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 
 	"github.com/compliance-framework/agent/runner"
 	"github.com/compliance-framework/agent/runner/proto"
@@ -52,12 +54,24 @@ func (l *IntruderPlugin) Configure(req *proto.ConfigureRequest) (*proto.Configur
 }
 
 func (l *IntruderPlugin) Eval(req *proto.EvalRequest, apiHelper runner.ApiHelper) (*proto.EvalResponse, error) {
+	if l.config == nil {
+		return nil, errors.New("plugin is not configured")
+	}
+
 	client, err := intruder.NewClient(l.config.BaseUrl, l.logger, l.config.Token)
 	if err != nil {
 		l.logger.Error("Error creating Intruder client", "error", err)
 		return nil, err
 	}
 	l.intruderClient = client
+
+	data, err := l.CollateData()
+	if err != nil {
+		l.logger.Error("Error collating data", "error", err)
+		return nil, err
+	}
+
+	l.logger.Info("Collated Intruder data", "targets", len(data.Targets), "issues", len(data.Issues))
 
 	return &proto.EvalResponse{
 		Status: proto.ExecutionStatus_SUCCESS,
@@ -66,6 +80,7 @@ func (l *IntruderPlugin) Eval(req *proto.EvalRequest, apiHelper runner.ApiHelper
 
 type IntruderData struct {
 	Targets []intruder.Target
+	Issues  []intruder.Issue
 }
 
 func (l *IntruderPlugin) CollateData() (*IntruderData, error) {
@@ -77,8 +92,52 @@ func (l *IntruderPlugin) CollateData() (*IntruderData, error) {
 		return nil, err
 	}
 	data.Targets = targets
+
+	issues, issErr := l.FetchIssuesForAllTargets(targets)
+	if issErr != nil {
+		l.logger.Error("Error fetching issues for targets from Intruder", "error", issErr)
+		return nil, issErr
+	}
+	data.Issues = issues
+
 	return data, nil
 
+}
+
+func (l *IntruderPlugin) FetchIssuesForAllTargets(targets []intruder.Target) ([]intruder.Issue, error) {
+	type issueResult struct {
+		issues []intruder.Issue
+		err    error
+	}
+
+	issuesChan := make(chan issueResult, len(targets))
+	var wg sync.WaitGroup
+
+	for _, target := range targets {
+		wg.Go(func() {
+			issues, err := l.intruderClient.FetchIssuesForTarget(target.Address)
+			if err != nil {
+				issuesChan <- issueResult{err: fmt.Errorf("target %s: %w", target.Address, err)}
+				return
+			}
+			issuesChan <- issueResult{issues: issues}
+		})
+	}
+
+	go func() {
+		wg.Wait()
+		close(issuesChan)
+	}()
+
+	allIssues := make([]intruder.Issue, 0)
+	for result := range issuesChan {
+		if result.err != nil {
+			return nil, result.err
+		}
+		allIssues = append(allIssues, result.issues...)
+	}
+
+	return allIssues, nil
 }
 
 func main() {

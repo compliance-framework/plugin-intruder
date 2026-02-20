@@ -21,6 +21,11 @@ type Target struct {
 	Address string
 }
 
+type Issue struct {
+	TargetAddress string
+	Title         string
+}
+
 type transport struct {
 	token string
 	base  http.RoundTripper
@@ -112,4 +117,54 @@ func (c *Client) FetchTargets() ([]Target, error) {
 
 	c.Logger.Debug("Fetched all targets", "total", len(allTargets))
 	return allTargets, nil
+}
+
+func (c *Client) FetchIssuesForTarget(targetAddress string) ([]Issue, error) {
+	allIssues := []Issue{}
+	limit := 25                                                                       //Intruder default
+	next := fmt.Sprintf("issues/?limit=%d&target_addresses=%s", limit, targetAddress) //Defaults to 0 offset + limit to start
+
+	for {
+		resp, err := c.Do(http.MethodGet, next)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			closeErr := resp.Body.Close()
+			if closeErr != nil {
+				c.Logger.Error("Failed to close response body", "error", closeErr)
+			}
+			return nil, fmt.Errorf("Unexpected status code: %d. Unable to decode response", resp.StatusCode)
+		}
+		var result struct {
+			Next   string  `json:"next"`
+			Issues []Issue `json:"results"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			closeErr := resp.Body.Close()
+			if closeErr != nil {
+				c.Logger.Error("Failed to close response body", "error", closeErr)
+			}
+			return nil, err
+		}
+
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			c.Logger.Error("Failed to close response body", "error", closeErr)
+		}
+		allIssues = append(allIssues, result.Issues...)
+		c.Logger.Debug("Fetched issues for target", "target", targetAddress, "count", len(result.Issues), "total", len(allIssues))
+
+		next = result.Next
+		if next == "" {
+			break
+		}
+	}
+
+	c.Logger.Debug("Fetched all issues for target", "target", targetAddress, "total", len(allIssues))
+	for i := range allIssues {
+		allIssues[i].TargetAddress = targetAddress
+	}
+	return allIssues, nil
 }
