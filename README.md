@@ -15,6 +15,7 @@ plugins:
   intruder:
     config:
       token: "xxxxxxx-yyyyyyy-zzzzzz"
+      baseUrl: "http://api.com:1234" (optional)
 ```
 
 ## Policies

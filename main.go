@@ -19,7 +19,8 @@ type IntruderPlugin struct {
 }
 
 type PluginConfig struct {
-	Token string `mapstructure:"token"`
+	Token   string `mapstructure:"token"`
+	BaseUrl string `mapstructure:"baseUrl"`
 }
 
 func (c *PluginConfig) Validate() error {
@@ -51,7 +52,7 @@ func (l *IntruderPlugin) Configure(req *proto.ConfigureRequest) (*proto.Configur
 }
 
 func (l *IntruderPlugin) Eval(req *proto.EvalRequest, apiHelper runner.ApiHelper) (*proto.EvalResponse, error) {
-	client, err := intruder.NewClient(l.logger, l.config.Token)
+	client, err := intruder.NewClient(l.config.BaseUrl, l.logger, l.config.Token)
 	if err != nil {
 		l.logger.Error("Error creating Intruder client", "error", err)
 		return nil, err
@@ -61,6 +62,23 @@ func (l *IntruderPlugin) Eval(req *proto.EvalRequest, apiHelper runner.ApiHelper
 	return &proto.EvalResponse{
 		Status: proto.ExecutionStatus_SUCCESS,
 	}, nil
+}
+
+type IntruderData struct {
+	Targets []intruder.Target
+}
+
+func (l *IntruderPlugin) CollateData() (*IntruderData, error) {
+	data := &IntruderData{}
+
+	targets, err := l.intruderClient.FetchTargets()
+	if err != nil {
+		l.logger.Error("Error fetching targets from Intruder", "error", err)
+		return nil, err
+	}
+	data.Targets = targets
+	return data, nil
+
 }
 
 func main() {
