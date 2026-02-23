@@ -18,12 +18,22 @@ type Client struct {
 }
 
 type Target struct {
-	Address string
+	ID             int    `json:"id"`
+	Address        string `json:"address"`
+	DisplayAddress string `json:"display_address"`
+	TargetStatus   string `json:"target_status"`
+	Type           string `json:"target_type"`
 }
 
 type Issue struct {
-	TargetAddress string
-	Title         string
+	TargetAddress     string
+	ID                int     `json:"id"`
+	Severity          string  `json:"severity"`
+	Title             string  `json:"title"`
+	Description       string  `json:"description"`
+	Remediation       string  `json:"remediation"`
+	ExploitLikelihood string  `json:"exploit_likelihood"`
+	CVSSScore         float32 `json:"cvss_score"`
 }
 
 type transport struct {
@@ -73,9 +83,9 @@ func (c *Client) Do(method string, path string) (*http.Response, error) {
 }
 
 func (c *Client) FetchTargets() ([]Target, error) {
-	allTargets := []Target{}
-	limit := 25                                     //Intruder default
-	next := fmt.Sprintf("targets/?limit=%d", limit) //Defaults to 0 offset + limit to start
+	allTargets := make([]Target, 0)
+	limit := 25                                                        //Intruder default
+	next := fmt.Sprintf("targets/?limit=%d&target_status=live", limit) //Defaults to 0 offset + limit to start
 
 	for {
 		resp, err := c.Do(http.MethodGet, next)
@@ -120,9 +130,9 @@ func (c *Client) FetchTargets() ([]Target, error) {
 }
 
 func (c *Client) FetchIssuesForTarget(targetAddress string) ([]Issue, error) {
-	allIssues := []Issue{}
-	limit := 25                                                                       //Intruder default
-	next := fmt.Sprintf("issues/?limit=%d&target_addresses=%s", limit, targetAddress) //Defaults to 0 offset + limit to start
+	allIssues := make([]Issue, 0)
+	limit := 25                                                                                      //Intruder default
+	next := fmt.Sprintf("issues/?target_addresses=%s&snoozed=false&limit=%d&", targetAddress, limit) //Defaults to 0 offset + limit to start
 
 	for {
 		resp, err := c.Do(http.MethodGet, next)
