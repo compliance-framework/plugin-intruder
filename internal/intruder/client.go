@@ -101,38 +101,38 @@ func (c *Client) FetchAllTargets() ([]Target, error) {
 	next := fmt.Sprintf("targets/?limit=%d&target_status=live", limit) //Defaults to 0 offset + limit to start
 
 	for next != "" {
-		targets, nextBatch, err := c.FetchTargets(next)
+		result, err := fetchAPIEndpoint[struct {
+			Next    string   `json:"next"`
+			Targets []Target `json:"results"`
+		}](c, next)
 		if err != nil {
 			return nil, err
 		}
-		allTargets = append(allTargets, targets...)
-		c.Logger.Debug("Fetched targets", "count", len(targets), "total", len(allTargets))
-		next = nextBatch
+		allTargets = append(allTargets, result.Targets...)
+		c.Logger.Debug("Fetched targets", "count", len(result.Targets), "total", len(allTargets))
+		next = result.Next
 	}
 
 	c.Logger.Debug("Fetched all targets", "total", len(allTargets))
 	return allTargets, nil
 }
 
-func (c *Client) FetchTargets(url string) ([]Target, string, error) {
+func fetchAPIEndpoint[T any](c *Client, url string) (T, error) {
+	var result T
+
 	resp, err := c.Do(http.MethodGet, url)
 	if err != nil {
-		return nil, "", err
+		return result, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var result struct {
-		Next    string   `json:"next"`
-		Targets []Target `json:"results"`
+		return result, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, "", err
+		return result, err
 	}
-	return result.Targets, result.Next, nil
+	return result, nil
 }
 
 func (c *Client) FetchIssuesForTarget(targetAddress string) ([]Issue, error) {
@@ -141,32 +141,12 @@ func (c *Client) FetchIssuesForTarget(targetAddress string) ([]Issue, error) {
 	next := fmt.Sprintf("issues/?target_addresses=%s&snoozed=false&limit=%d", targetAddress, limit) //Defaults to 0 offset + limit to start
 
 	for {
-		resp, err := c.Do(http.MethodGet, next)
-		if err != nil {
-			return nil, err
-		}
-		if resp.StatusCode != http.StatusOK {
-			closeErr := resp.Body.Close()
-			if closeErr != nil {
-				c.Logger.Error("Failed to close response body", "error", closeErr)
-			}
-			return nil, fmt.Errorf("Unexpected status code: %d. Unable to decode response", resp.StatusCode)
-		}
-		var result struct {
+		result, err := fetchAPIEndpoint[struct {
 			Next   string  `json:"next"`
 			Issues []Issue `json:"results"`
-		}
-
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			closeErr := resp.Body.Close()
-			if closeErr != nil {
-				c.Logger.Error("Failed to close response body", "error", closeErr)
-			}
+		}](c, next)
+		if err != nil {
 			return nil, err
-		}
-		closeErr := resp.Body.Close()
-		if closeErr != nil {
-			c.Logger.Error("Failed to close response body", "error", closeErr)
 		}
 		allIssues = append(allIssues, result.Issues...)
 		c.Logger.Debug("Fetched issues for target", "target", targetAddress, "count", len(result.Issues), "total", len(allIssues))
@@ -199,33 +179,12 @@ func (c *Client) FetchOccurrencesForTargetIssue(targetAddress string, issueID in
 	next := fmt.Sprintf("issues/%d/occurrences/?target_addresses=%s&limit=%d", issueID, targetAddress, limit) //Defaults to 0 offset + limit to start
 
 	for {
-		resp, err := c.Do(http.MethodGet, next)
-		if err != nil {
-			return nil, err
-		}
-		if resp.StatusCode != http.StatusOK {
-			closeErr := resp.Body.Close()
-			if closeErr != nil {
-				c.Logger.Error("Failed to close response body", "error", closeErr)
-			}
-			return nil, fmt.Errorf("Unexpected status code: %d. Unable to decode response", resp.StatusCode)
-		}
-		var result struct {
+		result, err := fetchAPIEndpoint[struct {
 			Next        string       `json:"next"`
 			Occurrences []Occurrence `json:"results"`
-		}
-
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			closeErr := resp.Body.Close()
-			if closeErr != nil {
-				c.Logger.Error("Failed to close response body", "error", closeErr)
-			}
+		}](c, next)
+		if err != nil {
 			return nil, err
-		}
-
-		closeErr := resp.Body.Close()
-		if closeErr != nil {
-			c.Logger.Error("Failed to close response body", "error", closeErr)
 		}
 		allOccurrences = append(allOccurrences, result.Occurrences...)
 		c.Logger.Debug("Fetched occurrences for issue", "issue", strconv.Itoa(issueID), "count", len(result.Occurrences), "total", len(allOccurrences))
@@ -247,33 +206,12 @@ func (c *Client) FetchFixedOccurrencesForTarget(targetAddress string) ([]FixedOc
 	next := fmt.Sprintf("occurrences/fixed/?target_addresses=%s&limit=%d", targetAddress, limit) //Defaults to 0 offset + limit to start
 
 	for {
-		resp, err := c.Do(http.MethodGet, next)
-		if err != nil {
-			return nil, err
-		}
-		if resp.StatusCode != http.StatusOK {
-			closeErr := resp.Body.Close()
-			if closeErr != nil {
-				c.Logger.Error("Failed to close response body", "error", closeErr)
-			}
-			return nil, fmt.Errorf("Unexpected status code: %d. Unable to decode response", resp.StatusCode)
-		}
-		var result struct {
+		result, err := fetchAPIEndpoint[struct {
 			Next        string            `json:"next"`
 			Occurrences []FixedOccurrence `json:"results"`
-		}
-
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			closeErr := resp.Body.Close()
-			if closeErr != nil {
-				c.Logger.Error("Failed to close response body", "error", closeErr)
-			}
+		}](c, next)
+		if err != nil {
 			return nil, err
-		}
-
-		closeErr := resp.Body.Close()
-		if closeErr != nil {
-			c.Logger.Error("Failed to close response body", "error", closeErr)
 		}
 		allOccurrences = append(allOccurrences, result.Occurrences...)
 		c.Logger.Debug("Fetched occurrences for target", "target", targetAddress, "count", len(result.Occurrences), "total", len(allOccurrences))
