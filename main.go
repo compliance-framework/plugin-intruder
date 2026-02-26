@@ -63,10 +63,12 @@ type IssueResult struct {
 	Target                 *intruder.Target
 	FixedOccurrences       []intruder.FixedOccurrence
 	OutstandingOccurrences []intruder.Occurrence
+	Title                  string
+	Description            string
 	Issue                  *intruder.Issue
 }
 
-func getEvidenceUUIDHash(issueTitle string) string {
+func getIssueHash(issueTitle string) string {
 	hasher := md5.New()
 	hasher.Write([]byte(issueTitle))
 	return hex.EncodeToString(hasher.Sum(nil))
@@ -87,7 +89,7 @@ func (l *IntruderPlugin) Eval(req *proto.EvalRequest, apiHelper runner.ApiHelper
 	}
 	l.intruderClient = client
 
-	targets, err := l.intruderClient.FetchTargets()
+	targets, err := l.intruderClient.FetchAllTargets()
 	if err != nil {
 		l.Logger.Error("Error fetching targets from Intruder", "error", err)
 		return nil, err
@@ -179,15 +181,25 @@ func (l *IntruderPlugin) processTarget(ctx context.Context, target intruder.Targ
 		}
 
 		outstandingIssue := issue.issue
+		issueTitle := outstandingIssue.Title
+		issueDescription := outstandingIssue.Description
+		if issueTitle == "" && len(issue.fixed) > 0 {
+			issueTitle = issue.fixed[0].Title
+		}
+		if issueDescription == "" && len(issue.fixed) > 0 {
+			issueDescription = issue.fixed[0].Description
+		}
 
 		issueResult := &IssueResult{
 			Target:                 &target,
 			OutstandingOccurrences: outstandingIssue.Occurrences,
 			FixedOccurrences:       issue.fixed,
+			Title:                  issueTitle,
+			Description:            issueDescription,
 			Issue:                  &outstandingIssue,
 		}
 
-		l.Logger.Trace("Evaluating policies for issue against target", "target", issueResult.Target.Address, "issue", issueResult.Issue.Title)
+		l.Logger.Trace("Evaluating policies for issue against target", "target", issueResult.Target.Address, "issue", issueResult.Title)
 		evidences, err := l.EvalPolicies(ctx, issueResult, req)
 		if err != nil {
 			l.Logger.Error("Error evaluating policies", "target", issueResult.Target.Address, "error", err)
@@ -315,16 +327,7 @@ func (l *IntruderPlugin) EvalPolicies(ctx context.Context, data *IssueResult, re
 		},
 	}
 	for _, policyPath := range req.GetPolicyPaths() {
-		var title string
-		if data.Issue != nil && data.Issue.Title != "" {
-			title = data.Issue.Title
-		} else if len(data.FixedOccurrences) > 0 {
-			title = data.FixedOccurrences[0].Title
-		} else {
-			l.Logger.Warn("Skipping policy evaluation due to missing issue title", "target", data.Target.Address, "policy", policyPath)
-			continue
-		}
-		uidHash := getEvidenceUUIDHash(title)
+		uidHash := getIssueHash(data.Title)
 
 		processor := policyManager.NewPolicyProcessor(
 			l.Logger,

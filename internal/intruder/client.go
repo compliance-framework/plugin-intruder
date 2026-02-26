@@ -76,10 +76,9 @@ func NewClient(base string, logger hclog.Logger, token string) (*Client, error) 
 		HTTPClient: httpClient,
 	}
 	if base == "" {
-		client.BaseURL = baseUrl
-	} else {
-		client.BaseURL = base
+		base = baseUrl
 	}
+	client.BaseURL = base
 	return client, nil
 
 }
@@ -96,51 +95,44 @@ func (c *Client) Do(method string, path string) (*http.Response, error) {
 	return c.HTTPClient.Do(req)
 }
 
-func (c *Client) FetchTargets() ([]Target, error) {
+func (c *Client) FetchAllTargets() ([]Target, error) {
 	allTargets := make([]Target, 0)
 	limit := 25                                                        //Intruder default
 	next := fmt.Sprintf("targets/?limit=%d&target_status=live", limit) //Defaults to 0 offset + limit to start
 
-	for {
-		resp, err := c.Do(http.MethodGet, next)
+	for next != "" {
+		targets, nextBatch, err := c.FetchTargets(next)
 		if err != nil {
 			return nil, err
 		}
-		if resp.StatusCode != http.StatusOK {
-			closeErr := resp.Body.Close()
-			if closeErr != nil {
-				c.Logger.Error("Failed to close response body", "error", closeErr)
-			}
-			return nil, fmt.Errorf("Unexpected status code: %d. Unable to decode response", resp.StatusCode)
-		}
-		var result struct {
-			Next    string   `json:"next"`
-			Targets []Target `json:"results"`
-		}
-
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			closeErr := resp.Body.Close()
-			if closeErr != nil {
-				c.Logger.Error("Failed to close response body", "error", closeErr)
-			}
-			return nil, err
-		}
-
-		closeErr := resp.Body.Close()
-		if closeErr != nil {
-			c.Logger.Error("Failed to close response body", "error", closeErr)
-		}
-		allTargets = append(allTargets, result.Targets...)
-		c.Logger.Debug("Fetched targets", "count", len(result.Targets), "total", len(allTargets))
-
-		next = result.Next
-		if next == "" {
-			break
-		}
+		allTargets = append(allTargets, targets...)
+		c.Logger.Debug("Fetched targets", "count", len(targets), "total", len(allTargets))
+		next = nextBatch
 	}
 
 	c.Logger.Debug("Fetched all targets", "total", len(allTargets))
 	return allTargets, nil
+}
+
+func (c *Client) FetchTargets(url string) ([]Target, string, error) {
+	resp, err := c.Do(http.MethodGet, url)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Next    string   `json:"next"`
+		Targets []Target `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, "", err
+	}
+	return result.Targets, result.Next, nil
 }
 
 func (c *Client) FetchIssuesForTarget(targetAddress string) ([]Issue, error) {
