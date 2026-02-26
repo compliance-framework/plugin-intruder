@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
 	"strconv"
+	"sync"
 
 	policyManager "github.com/compliance-framework/agent/policy-manager"
 	"github.com/compliance-framework/agent/runner"
@@ -56,9 +59,22 @@ func (l *IntruderPlugin) Configure(req *proto.ConfigureRequest) (*proto.Configur
 	return &proto.ConfigureResponse{}, nil
 }
 
+type IssueResult struct {
+	Target                 *intruder.Target
+	FixedOccurrences       []intruder.FixedOccurrence
+	OutstandingOccurrences []intruder.Occurrence
+	Issue                  *intruder.Issue
+}
+
+func getEvidenceUUIDHash(issueTitle string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(issueTitle))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
 func (l *IntruderPlugin) Eval(req *proto.EvalRequest, apiHelper runner.ApiHelper) (*proto.EvalResponse, error) {
-	done := false
-	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	if l.config == nil {
 		return nil, errors.New("plugin is not configured")
@@ -76,41 +92,42 @@ func (l *IntruderPlugin) Eval(req *proto.EvalRequest, apiHelper runner.ApiHelper
 		l.Logger.Error("Error fetching targets from Intruder", "error", err)
 		return nil, err
 	}
-	issueChan, errChan := l.FetchIssues(targets)
 
-	for !done {
-		select {
-		case err, ok := <-errChan:
-			if !ok {
-				done = true
-				continue
-			}
-			l.Logger.Error("Error fetching issues", "error", err)
-			return &proto.EvalResponse{
-				Status: proto.ExecutionStatus_FAILURE,
-			}, err
-		case issueResult, ok := <-issueChan:
-			if !ok {
-				done = true
-				continue
-			}
-			evidences, err := l.EvalPolicies(ctx, issueResult, req)
+	if len(targets) == 0 {
+		l.Logger.Trace("Execution completed. No targets found")
+		return &proto.EvalResponse{Status: proto.ExecutionStatus_SUCCESS}, nil
+	}
 
-			if err != nil {
-				l.Logger.Error("Error evaluating policies", "target", issueResult.Target.Address, "error", err)
-				return &proto.EvalResponse{
-					Status: proto.ExecutionStatus_FAILURE,
-				}, err
+	errCh := make(chan error, 1)
+	var wg sync.WaitGroup
+
+	for i := range targets {
+		target := targets[i]
+		wg.Add(1)
+
+		go func(target intruder.Target) {
+			defer wg.Done()
+
+			if ctx.Err() != nil {
+				return
 			}
 
-			if err := apiHelper.CreateEvidence(ctx, evidences); err != nil {
-				l.Logger.Error("Error creating evidence", "error", err)
-				return &proto.EvalResponse{
-					Status: proto.ExecutionStatus_FAILURE,
-				}, err
+			if err := l.processTarget(ctx, target, req, apiHelper); err != nil {
+				select {
+				case errCh <- err:
+					cancel()
+				default:
+				}
 			}
+		}(target)
+	}
 
-		}
+	wg.Wait()
+
+	select {
+	case err := <-errCh:
+		return &proto.EvalResponse{Status: proto.ExecutionStatus_FAILURE}, err
+	default:
 	}
 
 	return &proto.EvalResponse{
@@ -118,34 +135,72 @@ func (l *IntruderPlugin) Eval(req *proto.EvalRequest, apiHelper runner.ApiHelper
 	}, nil
 }
 
-type IssueResult struct {
-	Target *intruder.Target
-	Issues []intruder.Issue
-	Err    error
-}
+func (l *IntruderPlugin) processTarget(ctx context.Context, target intruder.Target, req *proto.EvalRequest, apiHelper runner.ApiHelper) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+	l.Logger.Trace("Processing target", "target", target.Address)
+	fixedOccurrences, err := l.intruderClient.FetchFixedOccurrencesForTarget(target.Address)
+	if err != nil {
+		l.Logger.Error("Unable to fetch fixed occurrences for target", "target", target.Address, "error", err)
+		return err
+	}
 
-func (l *IntruderPlugin) FetchIssues(targets []intruder.Target) (chan *IssueResult, chan error) {
-	issueChan := make(chan *IssueResult)
-	errChan := make(chan error)
+	issues, err := l.intruderClient.FetchIssuesForTarget(target.Address)
+	if err != nil {
+		l.Logger.Error("Unable to fetch issues for target", "target", target.Address, "error", err)
+		return err
+	}
 
-	go func() {
-		defer close(issueChan)
-		defer close(errChan)
+	collatedIssues := make(map[string]struct {
+		issue intruder.Issue
+		fixed []intruder.FixedOccurrence
+	})
 
-		for _, target := range targets {
-			issues, err := l.intruderClient.FetchIssuesForTarget(target.Address)
-			if err != nil {
-				errChan <- fmt.Errorf("Unable to fetch issues for target %s: %w", target.Address, err)
-				continue
-			}
-			issueChan <- &IssueResult{
-				Target: &target,
-				Issues: issues,
-			}
+	for _, issue := range issues {
+		group := collatedIssues[issue.Title]
+		group.issue = issue
+		collatedIssues[issue.Title] = group
+	}
+
+	for _, fixedOccurrence := range fixedOccurrences {
+		group := collatedIssues[fixedOccurrence.Title]
+		group.fixed = append(group.fixed, fixedOccurrence)
+		collatedIssues[fixedOccurrence.Title] = group
+	}
+
+	for _, issue := range collatedIssues {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
 		}
 
-	}()
-	return issueChan, errChan
+		outstandingIssue := issue.issue
+
+		issueResult := &IssueResult{
+			Target:                 &target,
+			OutstandingOccurrences: outstandingIssue.Occurrences,
+			FixedOccurrences:       issue.fixed,
+			Issue:                  &outstandingIssue,
+		}
+
+		l.Logger.Trace("Evaluating policies for issue against target", "target", issueResult.Target.Address, "issue", issueResult.Issue.Title)
+		evidences, err := l.EvalPolicies(ctx, issueResult, req)
+		if err != nil {
+			l.Logger.Error("Error evaluating policies", "target", issueResult.Target.Address, "error", err)
+			return err
+		}
+
+		if err := apiHelper.CreateEvidence(ctx, evidences); err != nil {
+			l.Logger.Error("Error creating evidence", "target", issueResult.Target.Address, "error", err)
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (l *IntruderPlugin) EvalPolicies(ctx context.Context, data *IssueResult, req *proto.EvalRequest) ([]*proto.Evidence, error) {
@@ -207,7 +262,7 @@ func (l *IntruderPlugin) EvalPolicies(ctx context.Context, data *IssueResult, re
 			},
 			Links: []*proto.Link{
 				{
-					Href: fmt.Sprintf("https://portal.intruder.io/targets/%s", data.Target.ID),
+					Href: fmt.Sprintf("https://portal.intruder.io/targets/%d", data.Target.ID),
 					Text: policyManager.Pointer("Target Details"),
 				},
 			},
@@ -260,32 +315,36 @@ func (l *IntruderPlugin) EvalPolicies(ctx context.Context, data *IssueResult, re
 		},
 	}
 	for _, policyPath := range req.GetPolicyPaths() {
-		for _, issue := range data.Issues {
-			specificIssue := map[string]interface{}{
-				"target": data.Target,
-				"issue":  issue,
-			}
+		var title string
+		if data.Issue != nil && data.Issue.Title != "" {
+			title = data.Issue.Title
+		} else if len(data.FixedOccurrences) > 0 {
+			title = data.FixedOccurrences[0].Title
+		} else {
+			l.Logger.Warn("Skipping policy evaluation due to missing issue title", "target", data.Target.Address, "policy", policyPath)
+			continue
+		}
+		uidHash := getEvidenceUUIDHash(title)
 
-			processor := policyManager.NewPolicyProcessor(
-				l.Logger,
-				map[string]string{
-					"provider":    "intruder",
-					"type":        "issue",
-					"target":      data.Target.Address,
-					"target_type": data.Target.Type,
-					"issue_id":    strconv.Itoa(issue.ID),
-				},
-				subjects,
-				components,
-				inventory,
-				actors,
-				activities,
-			)
-			evidence, err := processor.GenerateResults(ctx, policyPath, specificIssue)
-			evidences = slices.Concat(evidences, evidence)
-			if err != nil {
-				accumulatedErrors = errors.Join(accumulatedErrors, err)
-			}
+		processor := policyManager.NewPolicyProcessor(
+			l.Logger,
+			map[string]string{
+				"provider":      "intruder",
+				"intruder_type": "issue",
+				"target":        data.Target.Address,
+				"_issue_hash":   uidHash,
+			},
+			subjects,
+			components,
+			inventory,
+			actors,
+			activities,
+		)
+
+		evidence, err := processor.GenerateResults(ctx, policyPath, data)
+		evidences = slices.Concat(evidences, evidence)
+		if err != nil {
+			accumulatedErrors = errors.Join(accumulatedErrors, err)
 		}
 
 	}

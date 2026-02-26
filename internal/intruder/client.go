@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
@@ -27,13 +28,26 @@ type Target struct {
 
 type Issue struct {
 	TargetAddress     string
-	ID                int     `json:"id"`
-	Severity          string  `json:"severity"`
-	Title             string  `json:"title"`
-	Description       string  `json:"description"`
-	Remediation       string  `json:"remediation"`
-	ExploitLikelihood string  `json:"exploit_likelihood"`
-	CVSSScore         float32 `json:"cvss_score"`
+	ID                int          `json:"id"`
+	Severity          string       `json:"severity"`
+	Title             string       `json:"title"`
+	Description       string       `json:"description"`
+	Remediation       string       `json:"remediation"`
+	ExploitLikelihood string       `json:"exploit_likelihood"`
+	CVSSScore         float32      `json:"cvss_score"`
+	Occurrences       []Occurrence `json:"-"`
+}
+
+type Occurrence struct {
+	ID        int    `json:"occurrence_id"`
+	FirstSeen string `json:"first_seen_at"`
+}
+
+type FixedOccurrence struct {
+	Occurrence
+	Title        string `json:"title"`
+	RemediatedAt string `json:"remediated_at"`
+	Description  string `json:"description"`
 }
 
 type transport struct {
@@ -131,8 +145,8 @@ func (c *Client) FetchTargets() ([]Target, error) {
 
 func (c *Client) FetchIssuesForTarget(targetAddress string) ([]Issue, error) {
 	allIssues := make([]Issue, 0)
-	limit := 25                                                                                      //Intruder default
-	next := fmt.Sprintf("issues/?target_addresses=%s&snoozed=false&limit=%d&", targetAddress, limit) //Defaults to 0 offset + limit to start
+	limit := 25                                                                                     //Intruder default
+	next := fmt.Sprintf("issues/?target_addresses=%s&snoozed=false&limit=%d", targetAddress, limit) //Defaults to 0 offset + limit to start
 
 	for {
 		resp, err := c.Do(http.MethodGet, next)
@@ -158,7 +172,6 @@ func (c *Client) FetchIssuesForTarget(targetAddress string) ([]Issue, error) {
 			}
 			return nil, err
 		}
-
 		closeErr := resp.Body.Close()
 		if closeErr != nil {
 			c.Logger.Error("Failed to close response body", "error", closeErr)
@@ -174,7 +187,112 @@ func (c *Client) FetchIssuesForTarget(targetAddress string) ([]Issue, error) {
 
 	c.Logger.Debug("Fetched all issues for target", "target", targetAddress, "total", len(allIssues))
 	for i := range allIssues {
-		allIssues[i].TargetAddress = targetAddress
+		issue := &allIssues[i]
+
+		occurrences, err := c.FetchOccurrencesForTargetIssue(targetAddress, issue.ID)
+		if err != nil {
+			c.Logger.Error("Failed to fetch occurrences for issue of target", "target", targetAddress, "issue_id", issue.ID, "error", err)
+			continue
+		}
+
+		issue.TargetAddress = targetAddress
+		issue.Occurrences = occurrences
 	}
 	return allIssues, nil
+}
+
+func (c *Client) FetchOccurrencesForTargetIssue(targetAddress string, issueID int) ([]Occurrence, error) {
+	allOccurrences := make([]Occurrence, 0)
+	limit := 25                                                                                               //Intruder default
+	next := fmt.Sprintf("issues/%d/occurrences/?target_addresses=%s&limit=%d", issueID, targetAddress, limit) //Defaults to 0 offset + limit to start
+
+	for {
+		resp, err := c.Do(http.MethodGet, next)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			closeErr := resp.Body.Close()
+			if closeErr != nil {
+				c.Logger.Error("Failed to close response body", "error", closeErr)
+			}
+			return nil, fmt.Errorf("Unexpected status code: %d. Unable to decode response", resp.StatusCode)
+		}
+		var result struct {
+			Next        string       `json:"next"`
+			Occurrences []Occurrence `json:"results"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			closeErr := resp.Body.Close()
+			if closeErr != nil {
+				c.Logger.Error("Failed to close response body", "error", closeErr)
+			}
+			return nil, err
+		}
+
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			c.Logger.Error("Failed to close response body", "error", closeErr)
+		}
+		allOccurrences = append(allOccurrences, result.Occurrences...)
+		c.Logger.Debug("Fetched occurrences for issue", "issue", strconv.Itoa(issueID), "count", len(result.Occurrences), "total", len(allOccurrences))
+
+		next = result.Next
+		if next == "" {
+			break
+		}
+	}
+
+	c.Logger.Debug("Fetched all occurrences for issue on target", "target", targetAddress, "issue", strconv.Itoa(issueID), "total", len(allOccurrences))
+
+	return allOccurrences, nil
+}
+
+func (c *Client) FetchFixedOccurrencesForTarget(targetAddress string) ([]FixedOccurrence, error) {
+	allOccurrences := make([]FixedOccurrence, 0)
+	limit := 25                                                                                  //Intruder default
+	next := fmt.Sprintf("occurrences/fixed/?target_addresses=%s&limit=%d", targetAddress, limit) //Defaults to 0 offset + limit to start
+
+	for {
+		resp, err := c.Do(http.MethodGet, next)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			closeErr := resp.Body.Close()
+			if closeErr != nil {
+				c.Logger.Error("Failed to close response body", "error", closeErr)
+			}
+			return nil, fmt.Errorf("Unexpected status code: %d. Unable to decode response", resp.StatusCode)
+		}
+		var result struct {
+			Next        string            `json:"next"`
+			Occurrences []FixedOccurrence `json:"results"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			closeErr := resp.Body.Close()
+			if closeErr != nil {
+				c.Logger.Error("Failed to close response body", "error", closeErr)
+			}
+			return nil, err
+		}
+
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			c.Logger.Error("Failed to close response body", "error", closeErr)
+		}
+		allOccurrences = append(allOccurrences, result.Occurrences...)
+		c.Logger.Debug("Fetched occurrences for target", "target", targetAddress, "count", len(result.Occurrences), "total", len(allOccurrences))
+
+		next = result.Next
+		if next == "" {
+			break
+		}
+	}
+
+	c.Logger.Debug("Fetched all fixed occurrences for target", "target", targetAddress, "total", len(allOccurrences))
+
+	return allOccurrences, nil
 }
