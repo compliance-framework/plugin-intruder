@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/compliance-framework/agent v0.2.1
-	github.com/go-viper/mapstructure/v2 v2.3.0
+	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.7.0
 )
