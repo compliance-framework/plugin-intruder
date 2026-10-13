@@ -1,2 +1,5 @@
 lisa-addressed:
 pass 1: README Subjects section now says Init runs only with protocol_version 2 (config or image annotation) and v1 behaves as before.
+
+lisa-selfreview:
+pass 2: no findings; approve.
