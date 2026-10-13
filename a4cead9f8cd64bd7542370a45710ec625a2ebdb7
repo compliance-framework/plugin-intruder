@@ -2,3 +2,6 @@ lisa-design:
 - ci.yml is mock-plugin-1's caller verbatim minus its trial header line, with all three pins moved from v1.5.1 to v1.5.2 (6e7fc9c); default branch is main so the push trigger is unchanged.
 - archives.format -> formats: [tar.gz]: a full goreleaser snapshot release before and after produced the same five archives (names, platforms, contents LICENSE/README.md/plugin).
 - release.yml and build-and-upload.yml stay untouched: W3 replaces them.
+
+lisa-selfreview:
+pass 1: no findings; approve. Checked ci.yml == mock-plugin-1 caller minus header, three v1.5.2 pins, permissions match the called workflows at 6e7fc9c; nothing else referenced push.yml/test.yml; actionlint v1.7.12 clean; goreleaser check clean; archives identical; golangci-lint new-only vs layer 2 and vs main 0 issues.
