@@ -1,0 +1,6 @@
+lisa-design:
+- Subject template type is SUBJECT_TYPE_COMPONENT by decision (the release automation depends on it), even though the existing evidence also lists an inventory-item subject.
+- Identity is the target label only; _issue_hash is per issue and deliberately left out of the template and label schema.
+- Evidence labels (provider, intruder_type, target, _issue_hash), subjects, components and inventory are untouched, so agents that never call Init get the same evidence.
+- Init uses context.Background(): the RunnerV2 Init signature carries no context (same as plugin-jira).
+- The Init test asserts each template field against literals rather than a shared constructor, so a drift in main.go fails the test.
