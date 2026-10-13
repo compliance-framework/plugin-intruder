@@ -31,7 +31,8 @@ package compliance_framework.deny_critical_severity
 ### Policy data
 
 Any `policy_data` set on this plugin's block in the agent configuration is passed
-to every policy evaluation and is available to Rego as `data.<key>`:
+to every policy evaluation and is available to Rego as `data.<key>`. The key below
+is only an example: your policies decide which keys they read.
 
 ```yaml
 plugins:
