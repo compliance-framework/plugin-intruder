@@ -24,6 +24,7 @@ type IntruderPlugin struct {
 
 	config         *PluginConfig
 	intruderClient *intruder.Client
+	policyData     map[string]interface{}
 }
 
 type PluginConfig struct {
@@ -55,6 +56,12 @@ func (l *IntruderPlugin) Configure(req *proto.ConfigureRequest) (*proto.Configur
 	}
 
 	l.config = config
+
+	if policyData := req.GetPolicyData(); policyData != nil {
+		l.policyData = policyData.AsMap()
+	} else {
+		l.policyData = nil
+	}
 
 	return &proto.ConfigureResponse{}, nil
 }
@@ -342,6 +349,7 @@ func (l *IntruderPlugin) EvalPolicies(ctx context.Context, data *IssueResult, re
 			inventory,
 			actors,
 			activities,
+			l.policyData,
 		)
 
 		evidence, err := processor.GenerateResults(ctx, policyPath, data)
