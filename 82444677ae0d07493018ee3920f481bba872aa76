@@ -4,3 +4,8 @@ lisa-design:
 - Evidence labels (provider, intruder_type, target, _issue_hash), subjects, components and inventory are untouched, so agents that never call Init get the same evidence.
 - Init uses context.Background(): the RunnerV2 Init signature carries no context (same as plugin-jira).
 - The Init test asserts each template field against literals rather than a shared constructor, so a drift in main.go fails the test.
+
+lisa-selfreview:
+pass 1 (strict): 1 finding.
+- CORE-DOC-001 (should-fix), README.md "Subjects": says "when the agent calls Init" but not when that happens. The agent only calls Init for protocol_version 2 (plugin config, or the image's org.ccf.plugin.protocol.version annotation); default is 1. -> fix: say so, and that v1 behaves as before.
+Checked, no finding: RunnerV2GRPCPlugin serves the same "runner" service, so v1 agents still Configure/Eval; Init returns the upsert error (tested); template fields asserted against literals; labels unchanged; gofmt/vet/test/race/golangci-lint (full + new-only vs layer 1)/goreleaser build clean; Init against the real plugin-intruder-policies dir upserts 1 subject template call and 1 risk-template package.
