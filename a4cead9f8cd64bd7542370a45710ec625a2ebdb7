@@ -1,0 +1,4 @@
+lisa-design:
+- ci.yml is mock-plugin-1's caller verbatim minus its trial header line, with all three pins moved from v1.5.1 to v1.5.2 (6e7fc9c); default branch is main so the push trigger is unchanged.
+- archives.format -> formats: [tar.gz]: a full goreleaser snapshot release before and after produced the same five archives (names, platforms, contents LICENSE/README.md/plugin).
+- release.yml and build-and-upload.yml stay untouched: W3 replaces them.
