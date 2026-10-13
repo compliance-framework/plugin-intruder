@@ -66,6 +66,30 @@ func (l *IntruderPlugin) Configure(req *proto.ConfigureRequest) (*proto.Configur
 	return &proto.ConfigureResponse{}, nil
 }
 
+// Init registers the subject template for Intruder targets and the risk templates
+// declared by the configured policies (protocol v2).
+func (l *IntruderPlugin) Init(req *proto.InitRequest, apiHelper runner.ApiHelper) (*proto.InitResponse, error) {
+	ctx := context.Background()
+
+	subjectTemplates := []*proto.SubjectTemplate{
+		{
+			Name:                "intruder-target",
+			Type:                proto.SubjectType_SUBJECT_TYPE_COMPONENT,
+			TitleTemplate:       "Intruder Target: {{ .target }}",
+			DescriptionTemplate: "Host or URL scanned by Intruder ({{ .target }})",
+			PurposeTemplate:     "Represents an Intruder scan target whose outstanding issues are assessed",
+			IdentityLabelKeys:   []string{"target"},
+			LabelSchema: []*proto.SubjectLabelSchema{
+				{Key: "target", Description: "The Intruder target address: a hostname, IP address or URL"},
+				{Key: "provider", Description: "The source of the evidence, always \"intruder\""},
+				{Key: "intruder_type", Description: "The kind of Intruder record evaluated (\"issue\")"},
+			},
+		},
+	}
+
+	return runner.InitWithSubjectsAndRisksFromPolicies(ctx, l.Logger, req, apiHelper, subjectTemplates)
+}
+
 type IssueResult struct {
 	Target                 *intruder.Target
 	FixedOccurrences       []intruder.FixedOccurrence
@@ -377,7 +401,7 @@ func main() {
 	goplugin.Serve(&goplugin.ServeConfig{
 		HandshakeConfig: runner.HandshakeConfig,
 		Plugins: map[string]goplugin.Plugin{
-			"runner": &runner.RunnerGRPCPlugin{
+			"runner": &runner.RunnerV2GRPCPlugin{
 				Impl: intruder,
 			},
 		},
