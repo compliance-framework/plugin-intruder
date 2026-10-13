@@ -20,8 +20,11 @@ plugins:
 
 ## Subjects
 
-The plugin speaks protocol v2. When the agent calls `Init`, it registers one subject
-template with the API, plus any risk templates the configured policies declare:
+The plugin speaks protocol v2. The agent calls `Init` when the plugin runs with
+`protocol_version: 2`, set in the plugin's block of the agent configuration or read from
+the plugin image's `org.ccf.plugin.protocol.version` annotation; with protocol 1 (the
+default) the plugin collects and evaluates exactly as before. `Init` registers one
+subject template with the API, plus any risk templates the configured policies declare:
 
 | Field | Value |
 |---|---|
