@@ -2,3 +2,8 @@ lisa-design:
 - policy_data is kept from ConfigureRequest as AsMap() and reset to nil when a later Configure omits it (same as plugin-file-attestation#7), so a reconfigure never evaluates with stale data.
 - The plugin still serves the v1 RunnerGRPCPlugin here; Init (protocol v2) is the next layer of this stack (W2-S2-T02), not this PR.
 - go directive 1.26.1 comes from agent v0.9.1's go.mod via go get; above the 1.24 floor of the shared release workflow.
+
+lisa-selfreview:
+pass 1 (strict): 1 finding.
+- CORE-DOC-001-style nit, README.md "Policy data": the example key `ignored_issue_titles` could be read as a key the published intruder policy honours; say it is illustrative. -> fix
+Checked, no finding: policyData read concurrently by processTarget goroutines is read-only (policy-manager only marshals it / hands it to policyeval), same as l.config; agent requirement direct; no replace/go.work; build/test/race/vet/gofmt/golangci-lint(shared v1.5.2 config, full + new-only) clean.
