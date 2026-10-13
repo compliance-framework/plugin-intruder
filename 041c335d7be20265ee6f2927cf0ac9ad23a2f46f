@@ -1,0 +1,4 @@
+lisa-design:
+- policy_data is kept from ConfigureRequest as AsMap() and reset to nil when a later Configure omits it (same as plugin-file-attestation#7), so a reconfigure never evaluates with stale data.
+- The plugin still serves the v1 RunnerGRPCPlugin here; Init (protocol v2) is the next layer of this stack (W2-S2-T02), not this PR.
+- go directive 1.26.1 comes from agent v0.9.1's go.mod via go get; above the 1.24 floor of the shared release workflow.
