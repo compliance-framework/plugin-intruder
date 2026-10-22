@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/compliance-framework/plugin-intruder/compare/v0.2.0...v0.2.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **deps:** update all non-major dependencies ([#26](https://github.com/compliance-framework/plugin-intruder/issues/26)) ([7aae3e0](https://github.com/compliance-framework/plugin-intruder/commit/7aae3e04c94119733fb0523445eeb5efff9eceea))
+
 ## [0.2.0](https://github.com/compliance-framework/plugin-intruder/compare/v0.1.0...v0.2.0) (2026-10-14)
 
 
