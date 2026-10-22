@@ -6,8 +6,8 @@ require (
 	github.com/compliance-framework/agent v0.9.2
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/hashicorp/go-hclog v1.6.3
-	github.com/hashicorp/go-plugin v1.7.0
-	google.golang.org/protobuf v1.36.11
+	github.com/hashicorp/go-plugin v1.8.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
