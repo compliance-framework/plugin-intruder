@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/compliance-framework/plugin-intruder/compare/v0.2.0...v0.2.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **deps:** bump agent to v0.9.4 ([#28](https://github.com/compliance-framework/plugin-intruder/issues/28)) ([fd124ed](https://github.com/compliance-framework/plugin-intruder/commit/fd124ed0253137a8322383a7e6aec7e148d71d96))
+* **deps:** update all non-major dependencies ([#26](https://github.com/compliance-framework/plugin-intruder/issues/26)) ([7aae3e0](https://github.com/compliance-framework/plugin-intruder/commit/7aae3e04c94119733fb0523445eeb5efff9eceea))
+
 ## [0.2.0](https://github.com/compliance-framework/plugin-intruder/compare/v0.1.0...v0.2.0) (2026-10-14)
 
 
