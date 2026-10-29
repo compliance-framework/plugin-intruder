@@ -2,6 +2,8 @@ module github.com/compliance-framework/plugin-intruder
 
 go 1.26.1
 
+toolchain go1.26.10
+
 require (
 	github.com/compliance-framework/agent v0.9.4
 	github.com/go-viper/mapstructure/v2 v2.5.0
