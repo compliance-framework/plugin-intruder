@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2](https://github.com/compliance-framework/plugin-intruder/compare/v0.2.1...v0.2.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* **deps:** build with the go1.26.10 toolchain so Renovate can ship Go security fixes ([#29](https://github.com/compliance-framework/plugin-intruder/issues/29)) ([40b7b99](https://github.com/compliance-framework/plugin-intruder/commit/40b7b99890f8ea78b070e68cdf52363ac8308d95))
+* **deps:** bump agent to v0.9.6 ([#33](https://github.com/compliance-framework/plugin-intruder/issues/33)) ([568eb7b](https://github.com/compliance-framework/plugin-intruder/commit/568eb7bcb283644789ff081948b294feb91e3aa6))
+
 ## [0.2.1](https://github.com/compliance-framework/plugin-intruder/compare/v0.2.0...v0.2.1) (2026-10-28)
 
 
