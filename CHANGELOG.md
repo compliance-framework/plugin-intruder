@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/compliance-framework/plugin-intruder/compare/v0.2.2...v0.2.3) (2026-11-12)
+
+
+### Bug Fixes
+
+* **deps:** update security fixes (gomod) [security] ([#34](https://github.com/compliance-framework/plugin-intruder/issues/34)) ([513bcd9](https://github.com/compliance-framework/plugin-intruder/commit/513bcd9819cafb87cd80a87d2cc350fe7f2f3dba))
+
 ## [0.2.2](https://github.com/compliance-framework/plugin-intruder/compare/v0.2.1...v0.2.2) (2026-11-02)
 
 
